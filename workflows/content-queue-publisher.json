@@ -1,0 +1,100 @@
+{
+  "name": "Content Queue Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12,18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-queue",
+      "name": "Twice Daily (12PM, 6PM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Generate 3 different social media posts about DevOps, cloud, or cybersecurity. Each post should have a different angle:\n1. A tip or best practice\n2. A question to spark engagement\n3. A trending topic take\n\nFormat as JSON array: [{\"content\": \"...\", \"type\": \"tip\"}, ...]"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.9,
+          "maxTokens": 500,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-batch-generate",
+      "name": "Generate Batch Content",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [220, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json.text || $input.first().json.message?.content;\nlet posts;\ntry {\n  const parsed = JSON.parse(response);\n  posts = parsed.posts || parsed;\n} catch(e) {\n  posts = [{content: response, type: 'general'}];\n}\n\nreturn posts.map(p => ({json: {...p, timestamp: new Date().toISOString()}}));"
+      },
+      "id": "parse-batch",
+      "name": "Parse & Split Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.FACEBOOK_PAGE_ID}}/feed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{$env.FACEBOOK_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fb-queue-post",
+      "name": "Post to Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 0]
+    }
+  ],
+  "connections": {
+    "Twice Daily (12PM, 6PM)": {
+      "main": [[{"node": "Generate Batch Content", "type": "main", "index": 0}]]
+    },
+    "Generate Batch Content": {
+      "main": [[{"node": "Parse & Split Posts", "type": "main", "index": 0}]]
+    },
+    "Parse & Split Posts": {
+      "main": [[{"node": "Post to Facebook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  }
+}

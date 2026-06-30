@@ -1,0 +1,237 @@
+{
+  "name": "AI Social Media Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Schedule (9 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "You are a social media content creator. Generate a short, engaging social media post about one of these topics: technology, DevOps, cloud computing, cybersecurity, AI, or software engineering.\n\nRules:\n- Keep it under 280 characters for Twitter compatibility\n- Make it engaging and informative\n- Include 2-3 relevant hashtags\n- Don't use emojis excessively\n- Vary the tone between educational, thought-provoking, and conversational\n\nReturn ONLY the post text, nothing else."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 200
+        }
+      },
+      "id": "openai-generate",
+      "name": "Generate Post Content",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [220, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $input.first().json.text || $input.first().json.message?.content;\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      content: content,\n      twitter_content: content.substring(0, 280),\n      timestamp: now,\n      platforms: ['facebook', 'twitter', 'linkedin', 'instagram']\n    }\n  }\n];"
+      },
+      "id": "format-content",
+      "name": "Format for Platforms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.FACEBOOK_PAGE_ID}}/feed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{$env.FACEBOOK_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "facebook-post",
+      "name": "Post to Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, -200]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.twitter_content }}"
+      },
+      "id": "twitter-post",
+      "name": "Post to Twitter/X",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "position": [700, -50],
+      "credentials": {
+        "twitterOAuth2Api": {
+          "id": "twitter-cred",
+          "name": "Twitter OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.LINKEDIN_ACCESS_TOKEN}}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"author\": \"{{$env.LINKEDIN_PERSON_URN}}\",\n  \"lifecycleState\": \"PUBLISHED\",\n  \"specificContent\": {\n    \"com.linkedin.ugc.ShareContent\": {\n      \"shareCommentary\": {\n        \"text\": \"{{ $json.content }}\"\n      },\n      \"shareMediaCategory\": \"NONE\"\n    }\n  },\n  \"visibility\": {\n    \"com.linkedin.ugc.MemberNetworkVisibility\": \"PUBLIC\"\n  }\n}",
+        "options": {}
+      },
+      "id": "linkedin-post",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.INSTAGRAM_BUSINESS_ID}}/media",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "caption",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{$env.INSTAGRAM_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "instagram-post",
+      "name": "Post to Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 250]
+    },
+    {
+      "parameters": {
+        "content": "=**Social Media Post Published**\n\nContent: {{ $json.content }}\nTimestamp: {{ $json.timestamp }}\nPlatforms: Facebook, Twitter, LinkedIn, Instagram",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [940, 0]
+    }
+  ],
+  "connections": {
+    "Daily Schedule (9 AM)": {
+      "main": [
+        [
+          {
+            "node": "Generate Post Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Post Content": {
+      "main": [
+        [
+          {
+            "node": "Format for Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Platforms": {
+      "main": [
+        [
+          {
+            "node": "Post to Facebook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to Twitter/X",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to LinkedIn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Facebook": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "social-media"
+    },
+    {
+      "name": "automation"
+    }
+  ]
+}

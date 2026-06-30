@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env.local
+
+# n8n data
+n8n_data/
+postgres_data/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
