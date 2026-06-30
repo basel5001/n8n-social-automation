@@ -1,3 +1,5 @@
+![Security](https://github.com/basel5001/n8n-social-automation/actions/workflows/security.yml/badge.svg)
+
 # n8n Social Media Automation
 
 Automated social media publishing across multiple platforms using [n8n](https://n8n.io/) and AI-generated content.
